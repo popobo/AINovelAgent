@@ -169,7 +169,8 @@ export default function SettingsPage() {
     setModelsError(null);
     
     try {
-      const response = await fetch("/api/openrouter/models");
+      const deviceId = getDeviceId();
+      const response = await fetch(`/api/openrouter/models?device_id=${deviceId}`);
       const result = await response.json();
       
       if (result.success) {
@@ -476,16 +477,32 @@ export default function SettingsPage() {
                 <label className="block text-sm font-medium text-foreground/70 mb-2">
                   默认生成字数
                 </label>
-                <select 
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={defaultWordCount}
-                  onChange={(e) => setDefaultWordCount(Number(e.target.value))}
+                  onChange={(e) => {
+                    const inputValue = e.target.value;
+                    // 允许清空输入框
+                    if (inputValue === "") {
+                      setDefaultWordCount(0);
+                      return;
+                    }
+                    // 只允许数字
+                    const value = parseInt(inputValue, 10);
+                    if (!isNaN(value) && value >= 0) {
+                      setDefaultWordCount(value);
+                    }
+                  }}
+                  onBlur={() => {
+                    // 失去焦点时，如果值小于1则重置为1000
+                    if (defaultWordCount < 1) {
+                      setDefaultWordCount(1000);
+                    }
+                  }}
                   className="w-full px-4 py-2.5 bg-card/50 border border-border rounded-lg text-foreground"
-                >
-                  <option value="500">约500字</option>
-                  <option value="1000">约1000字</option>
-                  <option value="2000">约2000字</option>
-                  <option value="3000">约3000字</option>
-                </select>
+                />
               </div>
 
               <div>

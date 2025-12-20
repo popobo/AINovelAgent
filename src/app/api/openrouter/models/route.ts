@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/server";
 
 export interface OpenRouterModel {
   id: string;
@@ -34,12 +35,30 @@ let cachedModels: OpenRouterModel[] | null = null;
 let cacheTimestamp = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    // 优先从用户设置中获取 API Key
+    const { searchParams } = new URL(request.url);
+    const deviceId = searchParams.get("device_id");
     
-    // 检查缓存是否有效
-    if (cachedModels && Date.now() - cacheTimestamp < CACHE_DURATION) {
+    let apiKey = process.env.OPENROUTER_API_KEY;
+    
+    // 如果提供了 device_id，尝试从数据库获取用户的 API Key
+    if (deviceId) {
+      const supabase = createAdminClient();
+      const { data: settings } = await supabase
+        .from("user_settings")
+        .select("openrouter_api_key")
+        .eq("device_id", deviceId)
+        .single();
+      
+      if (settings?.openrouter_api_key) {
+        apiKey = settings.openrouter_api_key;
+      }
+    }
+    
+    // 检查缓存是否有效（只在没有用户自定义 API Key 时使用缓存）
+    if (!deviceId && cachedModels && Date.now() - cacheTimestamp < CACHE_DURATION) {
       return NextResponse.json({
         success: true,
         data: cachedModels,
