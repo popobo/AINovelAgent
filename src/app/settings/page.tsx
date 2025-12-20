@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Button, Card, CardContent, Input, Select } from "@/components/ui";
+import { useAppStore } from "@/stores/appStore";
 import type { AIProviderType } from "@/types";
 
 interface OpenRouterModel {
@@ -77,9 +78,32 @@ function formatPrice(price: string): string {
   return `$${num.toFixed(6)}`;
 }
 
+// 生成或获取设备 ID
+function getDeviceId(): string {
+  const storageKey = "ai-novel-device-id";
+  let deviceId = localStorage.getItem(storageKey);
+  if (!deviceId) {
+    deviceId = crypto.randomUUID();
+    localStorage.setItem(storageKey, deviceId);
+  }
+  return deviceId;
+}
+
 export default function SettingsPage() {
-  const [defaultProvider, setDefaultProvider] = useState<AIProviderType>("openai");
+  // 使用 zustand store 管理设置（同时保存到本地和服务器）
+  const {
+    defaultProvider,
+    setDefaultProvider,
+    defaultWordCount,
+    setDefaultWordCount,
+    temperature,
+    setTemperature,
+  } = useAppStore();
+  
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // API Keys（仅显示是否已配置，不显示实际值）
   const [apiKeys, setApiKeys] = useState({
@@ -96,6 +120,48 @@ export default function SettingsPage() {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // 页面加载时从服务器获取设置
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const deviceId = getDeviceId();
+        const response = await fetch(`/api/settings?device_id=${deviceId}`);
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+          const settings = result.data;
+          // 同步到 zustand store
+          if (settings.default_provider) {
+            setDefaultProvider(settings.default_provider);
+          }
+          if (settings.default_word_count) {
+            setDefaultWordCount(settings.default_word_count);
+          }
+          if (settings.temperature !== undefined) {
+            setTemperature(settings.temperature);
+          }
+          if (settings.openrouter_model) {
+            setOpenrouterModel(settings.openrouter_model);
+          }
+          // 加载 API Keys（如果已保存，显示占位符表示已配置）
+          setApiKeys({
+            openai: settings.openai_api_key || "",
+            anthropic: settings.anthropic_api_key || "",
+            deepseek: settings.deepseek_api_key || "",
+            qwen: settings.qwen_api_key || "",
+            openrouter: settings.openrouter_api_key || "",
+          });
+        }
+      } catch (error) {
+        console.error("加载设置失败:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSettings();
+  }, [setDefaultProvider, setDefaultWordCount, setTemperature]);
 
   // 获取 OpenRouter 模型列表
   const fetchOpenRouterModels = useCallback(async () => {
@@ -125,17 +191,48 @@ export default function SettingsPage() {
     }
   }, [defaultProvider, openrouterModels.length, fetchOpenRouterModels]);
 
-  const handleSave = () => {
-    // 在实际应用中，这里应该调用API保存设置
-    // 由于我们不使用认证，设置将保存在localStorage
-    localStorage.setItem("defaultProvider", defaultProvider);
-    if (defaultProvider === "openrouter") {
-      localStorage.setItem("openrouterModel", openrouterModel);
-    }
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError(null);
+    
+    try {
+      const deviceId = getDeviceId();
+      
+      // 发送 POST 请求保存设置到服务器
+      const response = await fetch("/api/settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          device_id: deviceId,
+          default_provider: defaultProvider,
+          openrouter_model: openrouterModel,
+          default_word_count: defaultWordCount,
+          temperature: temperature,
+          // API Keys
+          openai_api_key: apiKeys.openai,
+          anthropic_api_key: apiKeys.anthropic,
+          deepseek_api_key: apiKeys.deepseek,
+          qwen_api_key: apiKeys.qwen,
+          openrouter_api_key: apiKeys.openrouter,
+        }),
+      });
 
-    // API Keys应该保存到服务端环境变量，这里只是演示
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+      const result = await response.json();
+
+      if (result.success) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      } else {
+        setSaveError(result.error || "保存失败");
+      }
+    } catch (error) {
+      console.error("保存设置失败:", error);
+      setSaveError("网络错误，保存失败");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // 过滤模型
@@ -183,6 +280,16 @@ export default function SettingsPage() {
           <h1 className="text-3xl font-display text-primary mb-2">设置</h1>
           <p className="text-foreground/50">配置AI模型和API密钥</p>
         </div>
+
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent"></div>
+            <span className="ml-3 text-foreground/50">正在加载设置...</span>
+          </div>
+        )}
+
+        {!loading && (
+          <>
 
         {/* AI模型设置 */}
         <Card className="mb-6">
@@ -369,7 +476,11 @@ export default function SettingsPage() {
                 <label className="block text-sm font-medium text-foreground/70 mb-2">
                   默认生成字数
                 </label>
-                <select className="w-full px-4 py-2.5 bg-card/50 border border-border rounded-lg text-foreground">
+                <select 
+                  value={defaultWordCount}
+                  onChange={(e) => setDefaultWordCount(Number(e.target.value))}
+                  className="w-full px-4 py-2.5 bg-card/50 border border-border rounded-lg text-foreground"
+                >
                   <option value="500">约500字</option>
                   <option value="1000">约1000字</option>
                   <option value="2000">约2000字</option>
@@ -385,7 +496,8 @@ export default function SettingsPage() {
                   type="range"
                   min="0"
                   max="100"
-                  defaultValue="70"
+                  value={temperature * 100}
+                  onChange={(e) => setTemperature(Number(e.target.value) / 100)}
                   className="w-full accent-primary"
                 />
                 <div className="flex justify-between text-xs text-foreground/50 mt-1">
@@ -400,11 +512,25 @@ export default function SettingsPage() {
 
         {/* 保存按钮 */}
         <div className="flex items-center gap-4">
-          <Button onClick={handleSave}>保存设置</Button>
+          <Button onClick={handleSave} disabled={saving || loading}>
+            {saving ? (
+              <>
+                <span className="animate-spin mr-2">⏳</span>
+                保存中...
+              </>
+            ) : (
+              "保存设置"
+            )}
+          </Button>
           {saved && (
-            <span className="text-success text-sm">✓ 设置已保存</span>
+            <span className="text-success text-sm">✓ 设置已保存到服务器</span>
+          )}
+          {saveError && (
+            <span className="text-red-400 text-sm">✗ {saveError}</span>
           )}
         </div>
+        </>
+        )}
       </div>
     </main>
   );
