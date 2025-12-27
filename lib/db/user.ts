@@ -81,3 +81,29 @@ export async function updateUserDefaultEmbeddingModel(
   });
 }
 
+/**
+ * 更新用户的章节摘要temperature参数
+ */
+export async function updateUserSummaryTemperature(
+  userId: string,
+  summaryTemperature: number | null
+): Promise<User> {
+  return prisma.user.update({
+    where: { id: userId },
+    data: { summaryTemperature },
+  });
+}
+
+/**
+ * 更新用户的章节摘要max_tokens参数
+ */
+export async function updateUserSummaryMaxTokens(
+  userId: string,
+  summaryMaxTokens: number | null
+): Promise<User> {
+  return prisma.user.update({
+    where: { id: userId },
+    data: { summaryMaxTokens },
+  });
+}
+

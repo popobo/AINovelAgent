@@ -37,14 +37,16 @@ export async function generateChapterSummary(
   apiKey: string,
   model: string = 'openai/gpt-4o-mini',
   maxContextLength: number = 32000,
-  previousChapterSummaries?: PreviousChapterSummary[]
+  previousChapterSummaries?: PreviousChapterSummary[],
+  temperature: number = 0.3,
+  maxTokens: number = 2000
 ): Promise<ChapterSummary> {
   const client = createOpenRouterClient(apiKey);
 
   // 如果章节内容超过上下文限制，需要分段处理
   if (chapterContent.length > maxContextLength * 3) {
     // 粗略估算：假设平均每个字符0.5个token，需要预留空间给提示词和响应
-    return await generateChapterSummaryChunked(chapterContent, chapterTitle, apiKey, model, maxContextLength, previousChapterSummaries);
+    return await generateChapterSummaryChunked(chapterContent, chapterTitle, apiKey, model, maxContextLength, previousChapterSummaries, temperature, maxTokens);
   }
 
   // 构建之前章节摘要的上下文
@@ -158,20 +160,20 @@ ${chapterContent}`;
   let response;
   let responseContent: string | undefined;
   let debugFilepath: string | undefined;
-  const isDebugEnabled = process.env.PROMPT_DEBUG === 'enable';
+  const promptDebugUrl = process.env.PROMPT_DEBUG_URL;
   
   try {
     // 调试：保存发送给 LLM API 的全部内容到临时文件
-    if (isDebugEnabled) {
+    if (promptDebugUrl && promptDebugUrl != "") {
       try {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const filename = `chapter-summary-request-${timestamp}.json`;
-        debugFilepath = join('/tmp', filename);
+        debugFilepath = join(promptDebugUrl, filename);
         const debugData = {
           timestamp: new Date().toISOString(),
           model,
-          temperature: 0.3,
-          max_tokens: 2000,
+          temperature: temperature,
+          max_tokens: maxTokens,
           messages,
           chapterTitle,
           chapterContentLength: chapterContent.length,
@@ -187,15 +189,15 @@ ${chapterContent}`;
     response = await client.chatCompletion({
       model,
       messages,
-      temperature: 0.3,
-      max_tokens: 2000,
+      temperature,
+      max_tokens: maxTokens,
     });
 
     const content = response.choices[0]?.message?.content || '{}';
     responseContent = content;
     
     // 调试：将 LLM 回复内容追加到调试文件
-    if (isDebugEnabled && debugFilepath) {
+    if (promptDebugUrl && promptDebugUrl != "" && debugFilepath) {
       try {
         const existingData = JSON.parse(await readFile(debugFilepath, 'utf-8'));
         const updatedDebugData = {
@@ -233,7 +235,7 @@ ${chapterContent}`;
     const parsed = JSON.parse(jsonStr);
     
     // 调试：更新解析后的结果到调试文件
-    if (isDebugEnabled && debugFilepath) {
+    if (promptDebugUrl && promptDebugUrl != "" && debugFilepath) {
       try {
         const existingData = JSON.parse(await readFile(debugFilepath, 'utf-8'));
         const updatedDebugData = {
@@ -385,8 +387,8 @@ ${chapterContent}`;
             content: `请为以下章节生成摘要（500字以内）：\n\n章节标题：${chapterTitle || '未命名章节'}${previousContext}\n\n章节内容：\n${chapterContent.substring(0, 8000)}`, // 限制长度避免超限
           },
         ],
-        temperature: 0.3,
-        max_tokens: 1000,
+        temperature,
+        max_tokens: Math.floor(maxTokens * 0.5), // fallback使用一半的tokens
       });
       
       const fallbackSummary = fallbackResponse.choices[0]?.message?.content || '';
@@ -430,7 +432,9 @@ async function generateChapterSummaryChunked(
   apiKey: string,
   model: string,
   maxContextLength: number,
-  previousChapterSummaries?: PreviousChapterSummary[]
+  previousChapterSummaries?: PreviousChapterSummary[],
+  temperature: number = 0.3,
+  maxTokens: number = 2000
 ): Promise<ChapterSummary> {
   // 将内容按段落分割（假设每个段落不超过1000字符）
   const chunks: string[] = [];
@@ -444,21 +448,21 @@ async function generateChapterSummaryChunked(
   const chunkSummaries: string[] = [];
   for (const chunk of chunks) {
     const client = createOpenRouterClient(apiKey);
-    const response = await client.chatCompletion({
-      model,
-      messages: [
-        {
-          role: 'system',
-          content: '提取文本的核心要点，用简洁的语言描述（100字以内）。',
-        },
-        {
-          role: 'user',
-          content: `提取以下文本的核心要点：\n\n${chunk}`,
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 200,
-    });
+      const response = await client.chatCompletion({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: '提取文本的核心要点，用简洁的语言描述（100字以内）。',
+          },
+          {
+            role: 'user',
+            content: `提取以下文本的核心要点：\n\n${chunk}`,
+          },
+        ],
+        temperature,
+        max_tokens: Math.floor(maxTokens * 0.1), // 分段处理使用10%的tokens
+      });
 
     const summary = response.choices[0]?.message?.content || '';
     chunkSummaries.push(summary);
@@ -466,6 +470,6 @@ async function generateChapterSummaryChunked(
 
   // 合并所有段落摘要，生成最终摘要
   const combinedContent = chunkSummaries.join('\n\n');
-  return await generateChapterSummary(combinedContent, title, apiKey, model, maxContextLength, previousChapterSummaries);
+  return await generateChapterSummary(combinedContent, title, apiKey, model, maxContextLength, previousChapterSummaries, temperature, maxTokens);
 }
 

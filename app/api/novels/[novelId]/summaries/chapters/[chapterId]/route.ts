@@ -82,6 +82,10 @@ export async function POST(
     // 获取小说的上下文长度配置，如果没有则使用默认值 32000
     const maxContextLength = novel.maxContextLength ?? 32000;
 
+    // 获取用户的章节摘要参数配置，如果没有则使用默认值
+    const temperature = user.summaryTemperature ?? 0.3;
+    const maxTokens = user.summaryMaxTokens ?? 2000;
+
     // 获取之前章节的摘要（如果不是第一章）
     const previousChapterSummaries: Array<{
       chapterIndex: number;
@@ -151,7 +155,9 @@ export async function POST(
         user.openRouterKey,
         model,
         maxContextLength,
-        filteredPreviousSummaries.length > 0 ? filteredPreviousSummaries : undefined
+        filteredPreviousSummaries.length > 0 ? filteredPreviousSummaries : undefined,
+        temperature,
+        maxTokens
       );
       
       // 验证生成的摘要是否有效

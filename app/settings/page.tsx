@@ -31,6 +31,16 @@ export default function SettingsPage() {
   const [embeddingModelError, setEmbeddingModelError] = useState<string>('');
   const [embeddingModelSuccess, setEmbeddingModelSuccess] = useState<string>('');
 
+  // 章节摘要参数相关状态
+  const [summaryTemperature, setSummaryTemperature] = useState<number | null>(null);
+  const [summaryMaxTokens, setSummaryMaxTokens] = useState<number | null>(null);
+  const [loadingSummaryTemperature, setLoadingSummaryTemperature] = useState(false);
+  const [loadingSummaryMaxTokens, setLoadingSummaryMaxTokens] = useState(false);
+  const [summaryTemperatureError, setSummaryTemperatureError] = useState<string>('');
+  const [summaryTemperatureSuccess, setSummaryTemperatureSuccess] = useState<string>('');
+  const [summaryMaxTokensError, setSummaryMaxTokensError] = useState<string>('');
+  const [summaryMaxTokensSuccess, setSummaryMaxTokensSuccess] = useState<string>('');
+
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/login');
@@ -42,6 +52,8 @@ export default function SettingsPage() {
       fetchApiKeyStatus();
       fetchDefaultModel();
       fetchDefaultEmbeddingModel();
+      fetchSummaryTemperature();
+      fetchSummaryMaxTokens();
     }
   }, [status]);
 
@@ -78,6 +90,30 @@ export default function SettingsPage() {
       }
     } catch (err) {
       console.error('获取默认Embedding模型失败:', err);
+    }
+  };
+
+  const fetchSummaryTemperature = async () => {
+    try {
+      const response = await fetch('/api/user/summary-temperature');
+      if (response.ok) {
+        const data = await response.json();
+        setSummaryTemperature(data.summaryTemperature ?? null);
+      }
+    } catch (err) {
+      console.error('获取章节摘要temperature参数失败:', err);
+    }
+  };
+
+  const fetchSummaryMaxTokens = async () => {
+    try {
+      const response = await fetch('/api/user/summary-max-tokens');
+      if (response.ok) {
+        const data = await response.json();
+        setSummaryMaxTokens(data.summaryMaxTokens ?? null);
+      }
+    } catch (err) {
+      console.error('获取章节摘要max_tokens参数失败:', err);
     }
   };
 
@@ -189,6 +225,70 @@ export default function SettingsPage() {
       console.error('设置默认Embedding模型失败:', err);
     } finally {
       setLoadingDefaultEmbeddingModel(false);
+    }
+  };
+
+  const handleSetSummaryTemperature = async () => {
+    setLoadingSummaryTemperature(true);
+    setSummaryTemperatureError('');
+    setSummaryTemperatureSuccess('');
+
+    try {
+      const response = await fetch('/api/user/summary-temperature', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          summaryTemperature: summaryTemperature ?? null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setSummaryTemperatureError(data.error || '设置章节摘要temperature参数失败');
+        return;
+      }
+
+      setSummaryTemperatureSuccess('章节摘要temperature参数设置成功');
+    } catch (err) {
+      setSummaryTemperatureError('设置章节摘要temperature参数失败，请稍后重试');
+      console.error('设置章节摘要temperature参数失败:', err);
+    } finally {
+      setLoadingSummaryTemperature(false);
+    }
+  };
+
+  const handleSetSummaryMaxTokens = async () => {
+    setLoadingSummaryMaxTokens(true);
+    setSummaryMaxTokensError('');
+    setSummaryMaxTokensSuccess('');
+
+    try {
+      const response = await fetch('/api/user/summary-max-tokens', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          summaryMaxTokens: summaryMaxTokens ?? null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setSummaryMaxTokensError(data.error || '设置章节摘要max_tokens参数失败');
+        return;
+      }
+
+      setSummaryMaxTokensSuccess('章节摘要max_tokens参数设置成功');
+    } catch (err) {
+      setSummaryMaxTokensError('设置章节摘要max_tokens参数失败，请稍后重试');
+      console.error('设置章节摘要max_tokens参数失败:', err);
+    } finally {
+      setLoadingSummaryMaxTokens(false);
     }
   };
 
@@ -462,6 +562,124 @@ export default function SettingsPage() {
                     当前默认Embedding模型: <span className="font-medium text-gray-900">{defaultEmbeddingModel}</span>
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">
+                章节摘要参数设置
+              </h2>
+              <p className="text-sm text-gray-600 mb-4">
+                配置章节摘要生成时使用的AI参数。这些参数会影响摘要生成的质量和长度。
+              </p>
+
+              <div className="space-y-6">
+                {/* Temperature 设置 */}
+                <div>
+                  <label
+                    htmlFor="summaryTemperature"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Temperature（温度参数）
+                  </label>
+                  <input
+                    id="summaryTemperature"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="2"
+                    value={summaryTemperature ?? ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSummaryTemperature(value === '' ? null : parseFloat(value));
+                    }}
+                    placeholder="0.3"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    控制输出的随机性。范围：0-2。默认值：0.3。较低的值使输出更确定，较高的值使输出更随机。
+                  </p>
+
+                  {summaryTemperatureError && (
+                    <div className="mt-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-800 text-sm">
+                      {summaryTemperatureError}
+                    </div>
+                  )}
+
+                  {summaryTemperatureSuccess && (
+                    <div className="mt-2 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-green-800 text-sm">
+                      {summaryTemperatureSuccess}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleSetSummaryTemperature}
+                    disabled={loadingSummaryTemperature}
+                    className="mt-2 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {loadingSummaryTemperature ? '保存中...' : '保存Temperature设置'}
+                  </button>
+
+                  {summaryTemperature !== null && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      当前Temperature: <span className="font-medium text-gray-900">{summaryTemperature}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Max Tokens 设置 */}
+                <div>
+                  <label
+                    htmlFor="summaryMaxTokens"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Max Tokens（最大令牌数）
+                  </label>
+                  <input
+                    id="summaryMaxTokens"
+                    type="number"
+                    min="100"
+                    max="10000"
+                    value={summaryMaxTokens ?? ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSummaryMaxTokens(value === '' ? null : parseInt(value, 10));
+                    }}
+                    placeholder="2000"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    控制生成摘要的最大长度。范围：100-10000。默认值：2000。较大的值允许生成更长的摘要。
+                  </p>
+
+                  {summaryMaxTokensError && (
+                    <div className="mt-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-800 text-sm">
+                      {summaryMaxTokensError}
+                    </div>
+                  )}
+
+                  {summaryMaxTokensSuccess && (
+                    <div className="mt-2 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-green-800 text-sm">
+                      {summaryMaxTokensSuccess}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleSetSummaryMaxTokens}
+                    disabled={loadingSummaryMaxTokens}
+                    className="mt-2 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {loadingSummaryMaxTokens ? '保存中...' : '保存Max Tokens设置'}
+                  </button>
+
+                  {summaryMaxTokens !== null && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      当前Max Tokens: <span className="font-medium text-gray-900">{summaryMaxTokens}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

@@ -19,6 +19,8 @@ model User {
   openRouterKey         String?   // 用户自己的OpenRouter API Key（可选加密存储）
   defaultModel          String?   // 用户默认使用的AI模型ID（聊天模型）
   defaultEmbeddingModel String?   // 用户默认使用的Embedding模型ID（向量模型）
+  summaryTemperature    Float?    // 章节摘要生成的temperature参数
+  summaryMaxTokens       Int?      // 章节摘要生成的max_tokens参数
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
   
