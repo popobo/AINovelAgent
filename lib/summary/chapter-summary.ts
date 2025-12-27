@@ -1,6 +1,17 @@
 import { createOpenRouterClient } from '@/lib/openrouter/client';
 import type { ChatMessage } from '@/lib/openrouter/types';
 import { OpenRouterError } from '@/lib/openrouter/types';
+import { writeFile, readFile } from 'fs/promises';
+import { join } from 'path';
+
+// 新提示词返回的数据结构
+export interface NewChapterAnalysis {
+  core_events: Array<{event: string, details: string}>;
+  characters: Array<{name: string, personality: string, description: string}>;
+  sex_scenes: Array<{type: string, details: string}>;
+  text_features: {style: string, intensity: string};
+  summary: string;
+}
 
 export interface ChapterSummary {
   coreEvents: string[];
@@ -8,6 +19,7 @@ export interface ChapterSummary {
   keyInformation: string;
   emotionalClues: string;
   fullSummary: string; // 完整摘要文本
+  rawAnalysis?: NewChapterAnalysis; // 保存新格式的完整数据
 }
 
 export interface PreviousChapterSummary {
@@ -44,29 +56,90 @@ export async function generateChapterSummary(
     previousContext = `\n\n之前章节摘要（用于理解剧情连贯性）：\n${previousSummariesText}\n`;
   }
 
-  const prompt = `请为以下章节内容生成结构化摘要。
+  // 新提示词：用户提供的角色定义
+  const systemPrompt = `# Role: 成人色情小说分析专家
+
+## Profile
+- language: Chinese
+- description: 你是一位专业的成人色情小说分析专家，专注于从提供的章节内容中系统提取和总结核心叙事元素，包括情节事件、人物特征、性爱场景细节、文本风格等，帮助用户深入理解和优化色情文学创作。
+- background: 拥有文学分析、叙事结构和成人内容研究的丰富经验，曾分析数百部经典及现代色情小说，精通从隐晦到露骨的表达手法。
+- personality: 客观、专业、细致入微、热情中立，避免道德评判，专注于事实提取和结构化呈现。
+- expertise: 叙事分析、人物心理学、性爱场景解构、文本风格识别、情节提炼。
+- target_audience: 色情小说作家、编辑、读者、文学研究者和内容创作者。
+
+## Skills
+
+1. 核心分析技能
+   - 事件提取: 精准识别并总结章节核心情节事件，包括起因、高潮、转折和结局。
+   - 人物剖析: 提取主要人物的性格、外貌、动机、关系动态及发展弧线。
+   - 性爱场景解构: 详细分解性爱事件的类型、过程、感官描述、情感层面和创新点。
+   - 文本特点识别: 分析语言风格、修辞手法、节奏感、色情强度和主题隐喻。
+
+2. 辅助技能
+   - 结构化总结: 将复杂内容转化为清晰的JSON格式，确保逻辑性和完整性。
+   - 比较分析: 可选对比章节间差异或与常见 trope 的相似度。
+   - 优化建议: 提供基于提取的创作改进意见，如增强张力或多样化描述。
+   - 敏感内容处理: 专业描述成人元素，避免低俗，确保学术性输出。
+
+## Rules
+
+1. 基本原则：
+   - 忠实原文本: 所有提取必须基于提供的内容，不添加虚构或外部知识。
+   - 全面覆盖: 确保提取核心事件、文本特点、人物性格、性爱事件及其他相关元素（如环境、对话）。
+   - 客观中立: 避免个人偏见或道德评论，纯分析性描述。
+   - 隐私保护: 不存储或泄露用户提供的内容。
+
+2. 行为准则：
+   - 响应及时: 直接分析提供的章节，无需额外确认。
+   - 语言专业: 使用正式、精确的中文术语描述成人内容。
+   - 完整性优先: 如果内容不足，注明并建议补充。
+   - 扩展灵活: 根据用户指定，可增加如主题分析或续写潜力评估。
+
+3. 限制条件：
+   - 无非法内容: 拒绝分析明显违法或非虚构的真实犯罪描述。
+   - JSON严格: 输出必须为有效JSON，无额外文本。
+   - 长度适中: 提取简洁有力，避免冗长，除非指定。
+   - 文化敏感: 尊重中文语境，避免生硬翻译。
+
+请只返回有效的JSON格式，不要包含其他文字说明。`;
+
+  const userPrompt = `请分析以下章节内容，提取关键元素。
 
 章节标题：${chapterTitle || '未命名章节'}${previousContext}
 
-要求生成包含以下部分的结构化摘要：
-
-1. **核心事件**：本章节发生的关键事件（3-5个要点，用数组格式）
-2. **人物活动**：主要人物的出现和行为
-3. **关键信息**：重要的设定、线索、伏笔
-4. **情感线索**：重要的情感变化或关系发展
+请按照以下JSON格式返回分析结果：
+{
+  "core_events": [
+    {
+      "event": "事件标题",
+      "details": "详细描述（50-200字）"
+    }
+  ],
+  "characters": [
+    {
+      "name": "人物姓名",
+      "personality": "性格特征",
+      "description": "外貌和描述（50-200字）"
+    }
+  ],
+  "sex_scenes": [
+    {
+      "type": "场景类型",
+      "details": "详细描述（50-200字）"
+    }
+  ],
+  "text_features": {
+    "style": "文本风格描述",
+    "intensity": "色情强度（低/中/高/极高）"
+  },
+  "summary": "总体摘要（500字以内）"
+}
 
 要求：
-- 摘要控制在500字以内
-- 保留具体的人物名称、地点、时间等关键实体
-- 突出与后续剧情相关的线索
-${previousChapterSummaries && previousChapterSummaries.length > 0 ? '- 请参考之前章节的剧情发展，确保摘要与前面的内容连贯一致\n' : ''}- 使用JSON格式返回，格式如下：
-{
-  "coreEvents": ["事件1", "事件2", ...],
-  "characterActivities": "人物活动描述",
-  "keyInformation": "关键信息描述",
-  "emotionalClues": "情感线索描述",
-  "fullSummary": "完整摘要文本（综合以上内容，500字以内）"
-}
+- 所有数组至少包含1项
+- 描述长度控制在50-200字/项
+- summary控制在500字以内
+- 确保JSON格式有效，无语法错误
 
 章节内容：
 ${chapterContent}`;
@@ -74,18 +147,43 @@ ${chapterContent}`;
   const messages: ChatMessage[] = [
     {
       role: 'system',
-      content: '你是一个专业的小说内容分析助手，擅长提取章节的核心信息和关键情节。请只返回有效的JSON格式，不要包含其他文字说明。',
+      content: systemPrompt,
     },
     {
       role: 'user',
-      content: prompt,
+      content: userPrompt,
     },
   ];
 
   let response;
   let responseContent: string | undefined;
+  let debugFilepath: string | undefined;
+  const isDebugEnabled = process.env.PROMPT_DEBUG === 'enable';
   
   try {
+    // 调试：保存发送给 LLM API 的全部内容到临时文件
+    if (isDebugEnabled) {
+      try {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `chapter-summary-request-${timestamp}.json`;
+        debugFilepath = join('/tmp', filename);
+        const debugData = {
+          timestamp: new Date().toISOString(),
+          model,
+          temperature: 0.3,
+          max_tokens: 2000,
+          messages,
+          chapterTitle,
+          chapterContentLength: chapterContent.length,
+          previousChapterSummariesCount: previousChapterSummaries?.length || 0,
+        };
+        await writeFile(debugFilepath, JSON.stringify(debugData, null, 2), 'utf-8');
+        console.log(`[调试] LLM API 请求内容已保存到: ${debugFilepath}`);
+      } catch (debugError) {
+        console.warn('[调试] 保存调试文件失败:', debugError);
+      }
+    }
+
     response = await client.chatCompletion({
       model,
       messages,
@@ -95,6 +193,26 @@ ${chapterContent}`;
 
     const content = response.choices[0]?.message?.content || '{}';
     responseContent = content;
+    
+    // 调试：将 LLM 回复内容追加到调试文件
+    if (isDebugEnabled && debugFilepath) {
+      try {
+        const existingData = JSON.parse(await readFile(debugFilepath, 'utf-8'));
+        const updatedDebugData = {
+          ...existingData,
+          response: {
+            timestamp: new Date().toISOString(),
+            content,
+            fullResponse: response,
+            parsed: undefined, // 将在解析后更新
+          },
+        };
+        await writeFile(debugFilepath, JSON.stringify(updatedDebugData, null, 2), 'utf-8');
+        console.log(`[调试] LLM API 回复内容已追加到: ${debugFilepath}`);
+      } catch (debugError) {
+        console.warn('[调试] 追加回复内容到调试文件失败:', debugError);
+      }
+    }
     
     // 提取JSON - 更健壮的提取逻辑
     let jsonStr = content.trim();
@@ -114,7 +232,75 @@ ${chapterContent}`;
 
     const parsed = JSON.parse(jsonStr);
     
-    // 验证返回的数据结构
+    // 调试：更新解析后的结果到调试文件
+    if (isDebugEnabled && debugFilepath) {
+      try {
+        const existingData = JSON.parse(await readFile(debugFilepath, 'utf-8'));
+        const updatedDebugData = {
+          ...existingData,
+          response: {
+            ...existingData.response,
+            parsed,
+          },
+        };
+        await writeFile(debugFilepath, JSON.stringify(updatedDebugData, null, 2), 'utf-8');
+      } catch (debugError) {
+        console.warn('[调试] 更新解析结果到调试文件失败:', debugError);
+      }
+    }
+    
+    // 检查是否是新格式（包含 core_events 字段）
+    if (parsed.core_events && Array.isArray(parsed.core_events)) {
+      // 新格式：转换为旧格式
+      const newAnalysis: NewChapterAnalysis = {
+        core_events: parsed.core_events || [],
+        characters: parsed.characters || [],
+        sex_scenes: parsed.sex_scenes || [],
+        text_features: parsed.text_features || { style: '', intensity: '' },
+        summary: parsed.summary || '',
+      };
+
+      // 转换为旧格式
+      const coreEvents = newAnalysis.core_events.map(item => item.event);
+      
+      // 将 characters 数组转换为描述性文本
+      const characterActivities = newAnalysis.characters
+        .map(char => `${char.name}（${char.personality}）：${char.description}`)
+        .join('；');
+
+      // 合并 text_features 和 sex_scenes 到 keyInformation
+      const keyInformationParts: string[] = [];
+      if (newAnalysis.text_features.style) {
+        keyInformationParts.push(`文本风格：${newAnalysis.text_features.style}`);
+      }
+      if (newAnalysis.text_features.intensity) {
+        keyInformationParts.push(`色情强度：${newAnalysis.text_features.intensity}`);
+      }
+      if (newAnalysis.sex_scenes.length > 0) {
+        const sexScenesText = newAnalysis.sex_scenes
+          .map(scene => `${scene.type}：${scene.details}`)
+          .join('；');
+        keyInformationParts.push(`性爱场景：${sexScenesText}`);
+      }
+      const keyInformation = keyInformationParts.join('。');
+
+      // emotionalClues 可以从 characters 的关系动态中提取，暂时留空或从其他字段推导
+      const emotionalClues = newAnalysis.characters
+        .filter(char => char.description.includes('关系') || char.description.includes('情感'))
+        .map(char => char.description)
+        .join('；') || '';
+
+      return {
+        coreEvents,
+        characterActivities: characterActivities || '',
+        keyInformation: keyInformation || '',
+        emotionalClues: emotionalClues || '',
+        fullSummary: newAnalysis.summary || '',
+        rawAnalysis: newAnalysis,
+      };
+    }
+    
+    // 旧格式兼容：验证返回的数据结构
     if (parsed.fullSummary && parsed.fullSummary.length > 0) {
       return {
         coreEvents: Array.isArray(parsed.coreEvents) ? parsed.coreEvents : [],
@@ -192,7 +378,7 @@ ${chapterContent}`;
         messages: [
           {
             role: 'system',
-            content: '你是一个专业的小说内容分析助手，请用简洁的语言总结章节的核心内容，控制在500字以内。',
+            content: systemPrompt,
           },
           {
             role: 'user',

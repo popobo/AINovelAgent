@@ -8,10 +8,18 @@ import { ChapterSummaryDisplay } from '@/components/novel/ChapterSummaryDisplay'
 import { GlobalSummaryDisplay } from '@/components/novel/GlobalSummaryDisplay';
 
 interface ChapterSummaryMetadata {
+  // 旧字段（保持兼容）
   coreEvents?: string[];
   characterActivities?: string;
   keyInformation?: string;
   emotionalClues?: string;
+  // 新字段
+  newAnalysis?: {
+    core_events?: Array<{event: string, details: string}>;
+    characters?: Array<{name: string, personality: string, description: string}>;
+    sex_scenes?: Array<{type: string, details: string}>;
+    text_features?: {style: string, intensity: string};
+  };
 }
 
 interface ChapterSummaryData {

@@ -96,7 +96,7 @@ export class ContextManager {
       novelSummary: novel?.summary || "",
       chapterSummaries: (chapterSummaries || [])
         .reverse()
-        .map((c) => ({
+        .map((c: { chapter_number: number; title: string | null; summary: string | null }) => ({
           chapter_number: c.chapter_number,
           title: c.title || undefined,
           summary: c.summary || "",

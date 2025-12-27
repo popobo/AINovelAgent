@@ -75,6 +75,12 @@ export async function GET(
             characterActivities?: string;
             keyInformation?: string;
             emotionalClues?: string;
+            newAnalysis?: {
+              core_events?: Array<{event: string, details: string}>;
+              characters?: Array<{name: string, personality: string, description: string}>;
+              sex_scenes?: Array<{type: string, details: string}>;
+              text_features?: {style: string, intensity: string};
+            };
           } | null,
         } : null,
       };

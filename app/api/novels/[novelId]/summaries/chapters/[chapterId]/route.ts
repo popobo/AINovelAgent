@@ -184,17 +184,25 @@ export async function POST(
       },
     });
 
+    // 构建metadata，同时保存旧格式和新格式数据
+    const metadata: Record<string, unknown> = {
+      coreEvents: summaryData.coreEvents,
+      characterActivities: summaryData.characterActivities,
+      keyInformation: summaryData.keyInformation,
+      emotionalClues: summaryData.emotionalClues,
+    };
+    
+    // 如果有新格式的原始数据，也保存到metadata中
+    if (summaryData.rawAnalysis) {
+      metadata.newAnalysis = summaryData.rawAnalysis;
+    }
+
     if (existingSummary) {
       await prisma.summary.update({
         where: { id: existingSummary.id },
         data: {
           content: summaryData.fullSummary,
-          metadata: {
-            coreEvents: summaryData.coreEvents,
-            characterActivities: summaryData.characterActivities,
-            keyInformation: summaryData.keyInformation,
-            emotionalClues: summaryData.emotionalClues,
-          },
+          metadata,
           version: existingSummary.version + 1,
         },
       });
@@ -205,12 +213,7 @@ export async function POST(
           type: 'CHAPTER',
           targetId: chapter.id,
           content: summaryData.fullSummary,
-          metadata: {
-            coreEvents: summaryData.coreEvents,
-            characterActivities: summaryData.characterActivities,
-            keyInformation: summaryData.keyInformation,
-            emotionalClues: summaryData.emotionalClues,
-          },
+          metadata,
         },
       });
     }
