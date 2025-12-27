@@ -1,0 +1,211 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 用户模型
+model User {
+  id                    String    @id @default(uuid())
+  name                  String?   @unique
+  email                 String?   @unique
+  password              String    // bcrypt加密的密码
+  openRouterKey         String?   // 用户自己的OpenRouter API Key（可选加密存储）
+  defaultModel          String?   // 用户默认使用的AI模型ID（聊天模型）
+  defaultEmbeddingModel String?   // 用户默认使用的Embedding模型ID（向量模型）
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  // 关联关系
+  novels        Novel[]
+  accounts      Account[]
+  sessions      Session[]
+  
+  @@map("users")
+}
+
+// NextAuth.js Account模型
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+// NextAuth.js Session模型
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// NextAuth.js VerificationToken模型
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// 小说模型
+model Novel {
+  id              String   @id @default(uuid())
+  title           String
+  description     String?  @db.Text
+  userId          String
+  maxContextLength Int?    @default(32000) // 上下文长度配置，用于章节摘要生成
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // 关联关系
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chapters    Chapter[]
+  summaries   Summary[]
+  metadata    NovelMetadata?
+  continuations Continuation[]
+  embeddings  Embedding[]
+  
+  @@index([userId])
+  @@map("novels")
+}
+
+// 章节模型
+model Chapter {
+  id           String   @id @default(uuid())
+  novelId      String
+  chapterIndex Int      // 章节索引（从1开始）
+  title        String?  // 章节标题
+  content      String   @db.Text // 原始文本内容
+  summary      String?  @db.Text // 章节摘要（可选，也可以单独存储在Summary表中）
+  wordCount    Int?     // 字数统计
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // 关联关系
+  novel        Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  embeddings   Embedding[]
+  
+  @@unique([novelId, chapterIndex])
+  @@index([novelId])
+  @@index([novelId, chapterIndex])
+  @@map("chapters")
+}
+
+// 摘要模型（三级摘要：章节/卷/全局）
+model Summary {
+  id          String      @id @default(uuid())
+  novelId     String
+  type        SummaryType // CHAPTER, VOLUME, GLOBAL
+  targetId    String?     // 关联的章节ID或卷ID（对于GLOBAL类型为null）
+  content     String      @db.Text // 摘要内容
+  metadata    Json?       // 额外信息（人物、设定等，JSON格式）
+  version     Int         @default(1) // 版本号，用于追踪更新
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // 关联关系
+  novel       Novel       @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  
+  @@unique([novelId, type, targetId])
+  @@index([novelId, type])
+  @@map("summaries")
+}
+
+enum SummaryType {
+  CHAPTER // 章节摘要
+  VOLUME  // 卷/部分摘要
+  GLOBAL  // 全局摘要
+}
+
+// 小说元数据（关键信息：人物、地点、世界观等）
+model NovelMetadata {
+  id          String   @id @default(uuid())
+  novelId     String   @unique
+  characters  Json?    // 人物信息（JSON格式）
+  locations   Json?    // 地点信息
+  timeline    Json?    // 时间线
+  worldRules  Json?    // 世界观规则
+  keyEvents   Json?    // 关键事件索引
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // 关联关系
+  novel       Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  
+  @@map("novel_metadata")
+}
+
+// 向量嵌入模型（使用pgvector存储）
+model Embedding {
+  id        String   @id @default(uuid())
+  novelId   String
+  chapterId String?
+  content   String   @db.Text // 原始文本内容（用于检索时显示）
+  embedding Unsupported("vector")? // pgvector类型，支持任意维度
+  createdAt DateTime @default(now())
+  
+  // 关联关系
+  novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapter   Chapter? @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  
+  @@index([novelId])
+  @@index([chapterId])
+  @@map("embeddings")
+}
+
+// 续写记录模型
+model Continuation {
+  id          String              @id @default(uuid())
+  novelId     String
+  strategy    ContinuationStrategy // 使用的续写策略：RAG, SUMMARY, HYBRID
+  prompt      String              @db.Text // 用户输入的提示词
+  context     Json?               // 续写时使用的上下文信息（JSON格式）
+  result      String              @db.Text // 续写结果
+  saveType    ContinuationSaveType? // 保存类型：APPEND（追加）或 NEW_VERSION（新版本）
+  chapterId   String?             // 如果追加，关联到哪个章节
+  createdAt   DateTime            @default(now())
+  
+  // 关联关系
+  novel       Novel               @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  
+  @@index([novelId])
+  @@index([createdAt])
+  @@map("continuations")
+}
+
+enum ContinuationStrategy {
+  RAG     // RAG方案：基于向量检索
+  SUMMARY // 摘要方案：基于摘要
+  HYBRID  // 混合方案：RAG+摘要+关键信息
+}
+
+enum ContinuationSaveType {
+  APPEND      // 追加到现有章节
+  NEW_VERSION // 创建新版本
+}
+
