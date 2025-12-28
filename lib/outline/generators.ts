@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { createOpenRouterClient } from '@/lib/openrouter/client';
 import { getOutlineGenerationPrompt } from './prompts';
 import { InvalidOutlineResponseError, OutlineGenerationError } from './errors';
+import { aggregateMetadataFromSummaries } from './aggregate-metadata';
 import type { ChatMessage } from '@/lib/openrouter/types';
 import type { Prisma } from '@prisma/client';
 import type {
@@ -46,19 +47,23 @@ export async function generateOutlines(
       );
     }
 
-    // 3. 加载上下文信息 - 只使用所有章节摘要
-    const allChapters = await prisma.chapter.findMany({
-      where: { novelId },
-      orderBy: { chapterIndex: 'asc' },
-    });
+    // 3. 加载上下文信息 - 使用所有章节摘要和聚合的metadata
+    const [allChapters, aggregatedMetadata] = await Promise.all([
+      prisma.chapter.findMany({
+        where: { novelId },
+        orderBy: { chapterIndex: 'asc' },
+      }),
+      aggregateMetadataFromSummaries(novelId),
+    ]);
 
-    // 4. 构建上下文对象 - 使用所有章节的摘要（不使用metadata）
+    // 4. 构建上下文对象 - 使用所有章节的摘要和聚合的metadata
     const context = {
       allChapters: allChapters.map((ch) => ({
         chapterIndex: ch.chapterIndex,
         title: ch.title,
         summary: ch.summary,
       })),
+      metadata: aggregatedMetadata || undefined,
       startingContext,
     };
 
