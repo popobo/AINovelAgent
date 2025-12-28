@@ -5,6 +5,7 @@ import { getUserById } from '@/lib/db/user';
 import { getNovelById } from '@/lib/db/novel';
 import { prisma } from '@/lib/prisma';
 import { generateChapterSummary } from '@/lib/summary/chapter-summary';
+import type { Prisma } from '@prisma/client';
 
 /**
  * 为章节生成摘要
@@ -208,7 +209,7 @@ export async function POST(
         where: { id: existingSummary.id },
         data: {
           content: summaryData.fullSummary,
-          metadata,
+          metadata: metadata as Prisma.InputJsonValue,
           version: existingSummary.version + 1,
         },
       });
@@ -219,7 +220,7 @@ export async function POST(
           type: 'CHAPTER',
           targetId: chapter.id,
           content: summaryData.fullSummary,
-          metadata,
+          metadata: metadata as Prisma.InputJsonValue,
         },
       });
     }
