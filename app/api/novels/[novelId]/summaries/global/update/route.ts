@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { generateGlobalSummary } from '@/lib/summary/global-summary';
 
 /**
- * 手动触发全局摘要更新
+ * 手动触发全局摘要重新生成
  */
 export async function POST(
   request: NextRequest,
@@ -123,13 +123,13 @@ ${globalSummary.recentChapters.map(ch => `第${ch.chapterIndex}章 ${ch.title ||
     }
 
     return NextResponse.json({
-      message: '全局摘要更新成功',
+      message: '全局摘要生成成功',
       summary: globalSummary,
     });
   } catch (error) {
-    console.error('全局摘要更新错误:', error);
+    console.error('全局摘要生成错误:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : '全局摘要更新失败' },
+      { error: error instanceof Error ? error.message : '全局摘要生成失败' },
       { status: 500 }
     );
   }

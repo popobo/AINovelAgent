@@ -2,7 +2,7 @@ import { createOpenRouterClient } from '@/lib/openrouter/client';
 import { prisma } from '@/lib/prisma';
 import type { ChatMessage } from '@/lib/openrouter/types';
 import type { Prisma } from '@prisma/client';
-import { readFile } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import type { NewChapterAnalysis } from './chapter-summary';
 
@@ -187,7 +187,6 @@ export async function generateGlobalSummary(
   } else {
     // 方法B：关键章节提取法
     globalSummary = await generateGlobalSummaryWithKeyChapters(
-      novelId,
       chapterSummaries,
       metadata,
       recentChapters,
@@ -253,8 +252,34 @@ ${metadata ? `【已有元数据】\n${JSON.stringify(metadata, null, 2)}` : ''}
     },
   ];
 
+  let response;
+  let debugFilepath: string | undefined;
+  const promptDebugUrl = process.env.PROMPT_DEBUG_URL;
+
   try {
-    const response = await client.chatCompletion({
+    // 调试：保存发送给 LLM API 的全部内容到临时文件
+    if (promptDebugUrl && promptDebugUrl != "") {
+      try {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `global-summary-direct-${timestamp}.json`;
+        debugFilepath = join(promptDebugUrl, filename);
+        const debugData = {
+          timestamp: new Date().toISOString(),
+          model,
+          temperature: 0.3,
+          max_tokens: 4000,
+          messages,
+          chapterSummariesCount: chapterSummaries.length,
+          method: 'direct',
+        };
+        await writeFile(debugFilepath, JSON.stringify(debugData, null, 2), 'utf-8');
+        console.log(`[调试] 全局摘要生成请求已保存到: ${debugFilepath}`);
+      } catch (debugError) {
+        console.warn('[调试] 保存调试文件失败:', debugError);
+      }
+    }
+
+    response = await client.chatCompletion({
       model,
       messages,
       temperature: 0.3,
@@ -262,6 +287,27 @@ ${metadata ? `【已有元数据】\n${JSON.stringify(metadata, null, 2)}` : ''}
     });
 
     const content = response.choices[0]?.message?.content || '{}';
+
+    // 调试：将 LLM 回复内容追加到调试文件
+    if (promptDebugUrl && promptDebugUrl != "" && debugFilepath) {
+      try {
+        const existingData = JSON.parse(await readFile(debugFilepath, 'utf-8'));
+        const updatedDebugData = {
+          ...existingData,
+          response: {
+            timestamp: new Date().toISOString(),
+            content,
+            fullResponse: response,
+            parsed: undefined, // 将在解析后更新
+          },
+        };
+        await writeFile(debugFilepath, JSON.stringify(updatedDebugData, null, 2), 'utf-8');
+        console.log(`[调试] 全局摘要生成回复已追加到: ${debugFilepath}`);
+      } catch (debugError) {
+        console.warn('[调试] 追加回复内容到调试文件失败:', debugError);
+      }
+    }
+
     let jsonStr = content.trim();
     if (jsonStr.startsWith('```')) {
       const lines = jsonStr.split('\n');
@@ -273,6 +319,24 @@ ${metadata ? `【已有元数据】\n${JSON.stringify(metadata, null, 2)}` : ''}
     }
 
     const parsed = JSON.parse(jsonStr);
+
+    // 调试：更新解析后的结果到调试文件
+    if (promptDebugUrl && promptDebugUrl != "" && debugFilepath) {
+      try {
+        const existingData = JSON.parse(await readFile(debugFilepath, 'utf-8'));
+        const updatedDebugData = {
+          ...existingData,
+          response: {
+            ...existingData.response,
+            parsed,
+          },
+        };
+        await writeFile(debugFilepath, JSON.stringify(updatedDebugData, null, 2), 'utf-8');
+        console.log(`[调试] 全局摘要解析结果已更新到: ${debugFilepath}`);
+      } catch (debugError) {
+        console.warn('[调试] 更新解析结果到调试文件失败:', debugError);
+      }
+    }
 
     // 确保 characters 包含 personality 字段（向后兼容）
     const normalizedChars: Record<string, { role: string; personality: string; relationships: string[]; arc: string }> = {};
@@ -335,7 +399,6 @@ ${metadata ? `【已有元数据】\n${JSON.stringify(metadata, null, 2)}` : ''}
  * 使用关键章节提取法生成全局摘要
  */
 async function generateGlobalSummaryWithKeyChapters(
-  novelId: string,
   chapterSummaries: Array<{ content: string; metadata: Prisma.JsonValue | null; targetId: string | null }>,
   metadata: { characters: Prisma.JsonValue; worldRules: Prisma.JsonValue } | null,
   recentChapters: Array<{ chapterIndex: number; title: string | null; summary: string }>,
@@ -346,16 +409,6 @@ async function generateGlobalSummaryWithKeyChapters(
 
   // 加载新的prompt
   const systemPrompt = await loadGlobalSummaryPrompt();
-
-  // 获取当前全局摘要（如果存在）
-  // 对于 GLOBAL 类型，targetId 为 null，不能使用 findUnique，改用 findFirst
-  const currentGlobal = await prisma.summary.findFirst({
-    where: {
-      novelId,
-      type: 'GLOBAL',
-      targetId: null,
-    },
-  });
 
   // 构建关键章节摘要文本（最近章节 + 所有核心章节摘要，包含 rawAnalysis）
   const keySummaries: string[] = [];
@@ -378,8 +431,6 @@ async function generateGlobalSummaryWithKeyChapters(
 【关键章节详细分析】
 ${keySummariesText}
 
-${currentGlobal ? `【当前全局摘要】\n${currentGlobal.content}` : ''}
-
 ${metadata ? `【已有元数据】\n${JSON.stringify(metadata, null, 2)}` : ''}
 
 请按照要求的JSON格式返回全局摘要，重点分析：
@@ -390,8 +441,6 @@ ${metadata ? `【已有元数据】\n${JSON.stringify(metadata, null, 2)}` : ''}
 5. 叙事模式、文本风格的演变
 6. 主题的发展轨迹
 7. 潜在的一致性问题
-
-${currentGlobal ? '注意：这是基于当前全局摘要的更新，请保留重要信息，补充新内容。' : ''}
 
 请返回有效的JSON格式，不要包含其他文字说明。`;
 
@@ -406,8 +455,35 @@ ${currentGlobal ? '注意：这是基于当前全局摘要的更新，请保留�
     },
   ];
 
+  let response;
+  let debugFilepath: string | undefined;
+  const promptDebugUrl = process.env.PROMPT_DEBUG_URL;
+
   try {
-    const response = await client.chatCompletion({
+    // 调试：保存发送给 LLM API 的全部内容到临时文件
+    if (promptDebugUrl && promptDebugUrl != "") {
+      try {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `global-summary-keychapters-${timestamp}.json`;
+        debugFilepath = join(promptDebugUrl, filename);
+        const debugData = {
+          timestamp: new Date().toISOString(),
+          model,
+          temperature: 0.3,
+          max_tokens: 4000,
+          messages,
+          chapterSummariesCount: chapterSummaries.length,
+          recentChaptersCount: recentChapters.length,
+          method: 'keychapters',
+        };
+        await writeFile(debugFilepath, JSON.stringify(debugData, null, 2), 'utf-8');
+        console.log(`[调试] 全局摘要生成请求已保存到: ${debugFilepath}`);
+      } catch (debugError) {
+        console.warn('[调试] 保存调试文件失败:', debugError);
+      }
+    }
+
+    response = await client.chatCompletion({
       model,
       messages,
       temperature: 0.3,
@@ -415,6 +491,27 @@ ${currentGlobal ? '注意：这是基于当前全局摘要的更新，请保留�
     });
 
     const content = response.choices[0]?.message?.content || '{}';
+
+    // 调试：将 LLM 回复内容追加到调试文件
+    if (promptDebugUrl && promptDebugUrl != "" && debugFilepath) {
+      try {
+        const existingData = JSON.parse(await readFile(debugFilepath, 'utf-8'));
+        const updatedDebugData = {
+          ...existingData,
+          response: {
+            timestamp: new Date().toISOString(),
+            content,
+            fullResponse: response,
+            parsed: undefined, // 将在解析后更新
+          },
+        };
+        await writeFile(debugFilepath, JSON.stringify(updatedDebugData, null, 2), 'utf-8');
+        console.log(`[调试] 全局摘要生成回复已追加到: ${debugFilepath}`);
+      } catch (debugError) {
+        console.warn('[调试] 追加回复内容到调试文件失败:', debugError);
+      }
+    }
+
     let jsonStr = content.trim();
     if (jsonStr.startsWith('```')) {
       const lines = jsonStr.split('\n');
@@ -426,6 +523,24 @@ ${currentGlobal ? '注意：这是基于当前全局摘要的更新，请保留�
     }
 
     const parsed = JSON.parse(jsonStr);
+
+    // 调试：更新解析后的结果到调试文件
+    if (promptDebugUrl && promptDebugUrl != "" && debugFilepath) {
+      try {
+        const existingData = JSON.parse(await readFile(debugFilepath, 'utf-8'));
+        const updatedDebugData = {
+          ...existingData,
+          response: {
+            ...existingData.response,
+            parsed,
+          },
+        };
+        await writeFile(debugFilepath, JSON.stringify(updatedDebugData, null, 2), 'utf-8');
+        console.log(`[调试] 全局摘要解析结果已更新到: ${debugFilepath}`);
+      } catch (debugError) {
+        console.warn('[调试] 更新解析结果到调试文件失败:', debugError);
+      }
+    }
 
     // 确保 characters 包含 personality 字段（向后兼容）
     const normalizedChars: Record<string, { role: string; personality: string; relationships: string[]; arc: string }> = {};
@@ -475,7 +590,7 @@ ${currentGlobal ? '注意：这是基于当前全局摘要的更新，请保留�
     }
 
     return {
-      corePlot: currentGlobal?.content || '',
+      corePlot: '',
       characters: normalizedChars,
       worldBuilding: metadataWorldRules || { setting: '', rules: [], locations: [] },
       recentChapters,

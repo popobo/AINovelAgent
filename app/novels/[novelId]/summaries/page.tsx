@@ -180,14 +180,14 @@ export default function SummariesPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        setError(errorData.error || '更新全局摘要失败');
+        setError(errorData.error || '生成全局摘要失败');
         return;
       }
 
-      setSuccess('全局摘要更新成功');
+      setSuccess('全局摘要生成成功');
       fetchSummaries();
     } catch {
-      setError('更新全局摘要失败');
+      setError('生成全局摘要失败');
     } finally {
       setUpdating(false);
     }
@@ -392,7 +392,7 @@ export default function SummariesPage() {
               disabled={updating}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {updating ? '更新中...' : '更新全局摘要'}
+              {updating ? '生成中...' : '重新生成全局摘要'}
             </button>
           </div>
           {globalSummary ? (
