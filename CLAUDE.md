@@ -47,7 +47,7 @@ Required (see `env.example`):
 
 Key models with cascade delete relationships (user deletion cascades to all their data):
 
-- **User** - Auth with username/password, stores optional OpenRouter API key and default model
+- **User** - Auth with username/password, stores optional OpenRouter API key, default model, and summary parameters (temperature, max tokens, embedding model)
 - **Novel** - Main entity, has `maxContextLength` config for summary generation
 - **Chapter** - Individual chapters with content, summary, word count, indexed by `(novelId, chapterIndex)`
 - **Summary** - Three-tier summary system: `CHAPTER`, `VOLUME`, `GLOBAL` (enum `SummaryType`)
@@ -63,14 +63,16 @@ app/                    # Next.js App Router
     novels/[id]/       # Novel CRUD, chapters, summaries, continuations
     auth/              # NextAuth endpoints
     openrouter/        # AI model integration
-    user/              # User settings
+    user/              # User settings (API key, models, summary params)
 components/
   auth/                # Login/register components
   novel/               # Novel-specific UI components
 lib/                   # Business logic layer (IMPORTANT: core logic lives here)
   auth/                # Auth utilities
+  continuation/        # Continuation strategies (RAG, SUMMARY, HYBRID)
   db/                  # Database access layer
   embeddings/          # Vector operations
+  handlers/            # Shared API route handlers
   novel/               # Novel services (chapter parsing, etc.)
   openrouter/          # OpenRouter client
   summary/             # Summary generation
@@ -85,14 +87,16 @@ prisma/
 2. **User Isolation** - All novel operations are scoped to the authenticated user. Database queries must filter by `userId`.
 
 3. **Three Continuation Strategies:**
-   - `RAG` - Retrieves relevant chapters via vector similarity search using pgvector embeddings (cosine similarity: `1 - (embedding <=> query_vector)`)
-   - `SUMMARY` - Uses global summaries and recent chapters for context
-   - `HYBRID` - Combines RAG, summaries, and key metadata
+   - `RAG` - Retrieves relevant chapters via vector similarity search using pgvector embeddings (cosine similarity: `1 - (embedding <=> query_vector)`), plus recent 3 chapters for context
+   - `SUMMARY` - Uses global summaries, recent chapter summaries, and novel metadata
+   - `HYBRID` (Recommended) - Combines RAG-retrieved chapters, global summary (compressed core plot only), recent chapter summaries, and top 5 key characters
 
 4. **Novel Processing Pipeline:**
    - Upload TXT file → (Priority 1: User-provided regex OR Priority 2: LLM generates regex OR Priority 3: Single temporary chapter) → Split into chapters → Create embeddings → Generate summaries
 
 5. **NextAuth.js** - Credentials provider with JWT strategy, stores sessions in database
+
+6. **Shared Handlers Pattern** - `lib/handlers/userSettings.ts` provides reusable functions for user settings GET/PUT routes
 
 ### API Route Structure
 
@@ -116,6 +120,9 @@ Other routes:
 - `GET/POST /api/auth/[...nextauth]` - NextAuth handler
 - `PUT /api/user/api-key` - Update API key
 - `PUT /api/user/default-model` - Update default model
+- `PUT /api/user/default-embedding-model` - Update default embedding model
+- `PUT /api/user/summary-temperature` - Update summary temperature parameter
+- `PUT /api/user/summary-max-tokens` - Update summary max_tokens parameter
 - `GET /api/openrouter/models` - List available AI models
 
 ### Core Services in lib/
@@ -138,7 +145,7 @@ Key business logic directories:
 
 - **Framework:** Vitest with V8 coverage
 - **Environment:** Node.js (set in `vitest.config.mts`)
-- **Test files:** Match `**/*.{test,spec}.{js,ts,jsx,tsx}`
+- **Test files:** Match `**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}`
 - **Coverage excludes:** `app/`, `public/`, config files, types, tests
 - **Test DB:** Uses `DATABASE_URL` env var or falls back to localhost postgres
 
@@ -148,3 +155,11 @@ Key business logic directories:
 - API routes return consistent error responses with appropriate HTTP status codes
 - Prisma queries use unique constraints defined in schema (e.g., `[novelId, chapterIndex]`)
 - All user data deletes cascade when a user is deleted
+
+### Important Implementation Details
+
+**GLOBAL Summary Queries**: For `Summary` records with `type: GLOBAL`, the `targetId` field is `null`. When querying, use `findFirst()` with `{ novelId, type: 'GLOBAL', targetId: null }` instead of `findUnique()` because the unique constraint includes `targetId`.
+
+**Chapter Merging**: When merging consecutive chapters, the system updates `chapterIndex` for all subsequent chapters to maintain the sequential index. This is handled in `lib/db/novel.ts`.
+
+**Embedding Model**: Default embedding model is `openai/text-embedding-3-small` (1536 dimensions). Users can configure their preferred embedding model via user settings.

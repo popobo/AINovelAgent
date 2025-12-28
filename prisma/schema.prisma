@@ -91,7 +91,8 @@ model Novel {
   metadata    NovelMetadata?
   continuations Continuation[]
   embeddings  Embedding[]
-  
+  outlines    ChapterOutline[]
+
   @@index([userId])
   @@map("novels")
 }
@@ -111,7 +112,8 @@ model Chapter {
   // 关联关系
   novel        Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
   embeddings   Embedding[]
-  
+  generatedOutlines ChapterOutline[] @relation("GeneratedOutlines")
+
   @@unique([novelId, chapterIndex])
   @@index([novelId])
   @@index([novelId, chapterIndex])
@@ -209,5 +211,41 @@ enum ContinuationStrategy {
 enum ContinuationSaveType {
   APPEND      // 追加到现有章节
   NEW_VERSION // 创建新版本
+}
+
+// 章节大纲模型
+model ChapterOutline {
+  id              String   @id @default(uuid())
+  novelId         String
+  chapterIndex    Int      // 大纲对应的章节索引
+  title           String   @db.Text // 章节标题
+  plotSummary     String   @db.Text // 详细剧情摘要（500+字符）
+  characterGoals  Json?    // 人物目标列表 [{character: string, goal: string}]
+  conflicts       Json?    // 冲突设定 {internal: string[], external: string[]}
+  emotionalArc    String?  @db.Text // 情感弧线描述
+  keyScenes       Json?    // 关键场景列表 [{description: string, position: string}]
+  notes           String?  @db.Text // 用户备注/编辑笔记
+  status          OutlineStatus @default(PENDING) // 大纲状态
+  generatedChapterId String? // 关联到已生成的章节ID
+  version         Int      @default(1) // 大纲版本号
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // 关联关系
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  generatedChapter Chapter? @relation("GeneratedOutlines", fields: [generatedChapterId], references: [id], onDelete: SetNull)
+
+  @@unique([novelId, chapterIndex])
+  @@index([novelId])
+  @@index([novelId, status])
+  @@index([novelId, chapterIndex])
+  @@map("chapter_outlines")
+}
+
+enum OutlineStatus {
+  PENDING   // 待处理（新生成的大纲）
+  APPROVED  // 已批准（用户确认，准备生成内容）
+  COMPLETED // 已完成（已生成章节内容）
+  SKIPPED   // 已跳过（用户选择跳过此大纲）
 }
 

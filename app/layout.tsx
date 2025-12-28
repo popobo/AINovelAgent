@@ -4,8 +4,8 @@ import { SessionProvider } from "@/components/auth/SessionProvider";
 import { Navigation } from "@/components/Navigation";
 
 export const metadata: Metadata = {
-  title: "AI小说续写系统",
-  description: "基于AI的百万字小说续写系统",
+  title: "AI小说创作系统",
+  description: "基于AI的智能小说创作系统，支持大纲规划和基于大纲创作",
 };
 
 export default function RootLayout({

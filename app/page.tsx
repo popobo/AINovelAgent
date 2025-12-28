@@ -17,10 +17,10 @@ export default async function Home() {
       <main className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
         <div className="text-center">
           <h1 className="text-4xl font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
-            AI小说续写系统
+            AI小说创作系统
           </h1>
           <p className="mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
-            基于OpenRouter的百万字小说AI续写系统，支持RAG、摘要和混合三种续写策略
+            基于AI的智能小说创作系统，支持章节大纲规划、基于大纲生成内容，帮助创作百万字长篇小说
           </p>
           <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
             <div className="rounded-md shadow">
@@ -46,25 +46,25 @@ export default async function Home() {
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-5">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">RAG方案</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">智能大纲规划</h3>
                 <p className="text-sm text-gray-500">
-                  基于向量检索的相关章节续写，精准匹配相关内容
+                  一次性生成多章节详细大纲，包含剧情、人物目标、冲突、情感弧线等
                 </p>
               </div>
             </div>
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-5">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">摘要方案</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">基于大纲创作</h3>
                 <p className="text-sm text-gray-500">
-                  基于全局摘要和最近章节，全面把握剧情发展
+                  严格按照批准的大纲生成章节内容，确保剧情连贯、人物一致
                 </p>
               </div>
             </div>
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-5">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">混合方案</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">灵活编辑管理</h3>
                 <p className="text-sm text-gray-500">
-                  结合RAG、摘要和关键信息，提供最优质的续写
+                  支持大纲编辑、批量操作、版本追踪，轻松管理长篇小说创作
                 </p>
               </div>
             </div>

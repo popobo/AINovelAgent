@@ -261,10 +261,10 @@ export default function NovelDetailPage() {
             <h2 className="text-xl font-semibold text-gray-900">章节列表</h2>
             <div className="flex gap-2">
               <Link
-                href={`/novels/${novelId}/continue`}
+                href={`/novels/${novelId}/outline`}
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
               >
-                续写
+                大纲管理
               </Link>
               <Link
                 href={`/novels/${novelId}/summaries`}
