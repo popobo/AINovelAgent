@@ -36,8 +36,7 @@ export async function registerUser(data: RegisterData) {
   });
 
   // 不返回密码
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { password, ...userWithoutPassword } = user;
+  const { password: _password, ...userWithoutPassword } = user;
   return userWithoutPassword;
 }
 

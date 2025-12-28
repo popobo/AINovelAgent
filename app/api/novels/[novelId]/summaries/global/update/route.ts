@@ -186,14 +186,19 @@ export async function GET(
       },
     });
 
+    // 如果全局摘要不存在,返回空对象而不是404
+    // 这样前端可以区分"未生成"和"错误"
     if (!summary) {
-      return NextResponse.json(
-        { error: '全局摘要不存在，请先生成' },
-        { status: 404 }
-      );
+      return NextResponse.json({
+        summary: null,
+        exists: false
+      });
     }
 
-    return NextResponse.json({ summary });
+    return NextResponse.json({
+      summary,
+      exists: true
+    });
   } catch (error) {
     console.error('获取全局摘要错误:', error);
     return NextResponse.json(

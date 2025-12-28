@@ -43,16 +43,42 @@ export async function createUser(data: {
 }
 
 /**
+ * 用户可更新的字段类型
+ */
+type UserUpdatableField = keyof Pick<User,
+  'openRouterKey' |
+  'defaultModel' |
+  'defaultEmbeddingModel' |
+  'summaryTemperature' |
+  'summaryMaxTokens'
+>;
+
+/**
+ * 通用的用户字段更新函数
+ * @param userId 用户ID
+ * @param field 要更新的字段名
+ * @param value 新值(可以是null)
+ * @returns 更新后的用户对象
+ */
+export async function updateUserField<T extends UserUpdatableField>(
+  userId: string,
+  field: T,
+  value: User[T] | null
+): Promise<User> {
+  return prisma.user.update({
+    where: { id: userId },
+    data: { [field]: value },
+  });
+}
+
+/**
  * 更新用户的OpenRouter API Key
  */
 export async function updateUserOpenRouterKey(
   userId: string,
   openRouterKey: string | null
 ): Promise<User> {
-  return prisma.user.update({
-    where: { id: userId },
-    data: { openRouterKey },
-  });
+  return updateUserField(userId, 'openRouterKey', openRouterKey);
 }
 
 /**
@@ -62,10 +88,7 @@ export async function updateUserDefaultModel(
   userId: string,
   defaultModel: string | null
 ): Promise<User> {
-  return prisma.user.update({
-    where: { id: userId },
-    data: { defaultModel },
-  });
+  return updateUserField(userId, 'defaultModel', defaultModel);
 }
 
 /**
@@ -75,10 +98,7 @@ export async function updateUserDefaultEmbeddingModel(
   userId: string,
   defaultEmbeddingModel: string | null
 ): Promise<User> {
-  return prisma.user.update({
-    where: { id: userId },
-    data: { defaultEmbeddingModel },
-  });
+  return updateUserField(userId, 'defaultEmbeddingModel', defaultEmbeddingModel);
 }
 
 /**
@@ -88,10 +108,7 @@ export async function updateUserSummaryTemperature(
   userId: string,
   summaryTemperature: number | null
 ): Promise<User> {
-  return prisma.user.update({
-    where: { id: userId },
-    data: { summaryTemperature },
-  });
+  return updateUserField(userId, 'summaryTemperature', summaryTemperature);
 }
 
 /**
@@ -101,9 +118,6 @@ export async function updateUserSummaryMaxTokens(
   userId: string,
   summaryMaxTokens: number | null
 ): Promise<User> {
-  return prisma.user.update({
-    where: { id: userId },
-    data: { summaryMaxTokens },
-  });
+  return updateUserField(userId, 'summaryMaxTokens', summaryMaxTokens);
 }
 
