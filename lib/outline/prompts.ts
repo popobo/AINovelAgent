@@ -13,15 +13,16 @@ export function getOutlineGenerationPrompt(
   context: OutlineContext
 ): string {
   const {
-    globalSummary,
+    allChapters = [],
     metadata,
-    recentChapters = [],
     startingContext: userContext,
   } = context;
 
-  // 构建全局摘要部分
-  const globalSummarySection = globalSummary
-    ? `【全局摘要】\n${globalSummary}\n`
+  // 构建所有章节摘要部分
+  const allChaptersSection = allChapters.length > 0
+    ? `【已有章节摘要】（按章节顺序）\n${allChapters.map((ch: { chapterIndex: number; title?: string | null; summary?: string | null }) =>
+      `第${ch.chapterIndex}章 ${ch.title || '未命名'}：${ch.summary || '无摘要'}`
+    ).join('\n\n')}\n`
     : '';
 
   // 构建人物设定部分
@@ -32,13 +33,6 @@ export function getOutlineGenerationPrompt(
   // 构建世界观部分
   const worldRulesSection = metadata?.worldRules
     ? `【世界观设定】\n${JSON.stringify(metadata.worldRules, null, 2)}\n`
-    : '';
-
-  // 构建最近章节摘要
-  const recentChaptersSection = recentChapters.length > 0
-    ? `【最近章节摘要】\n${recentChapters.map((ch) =>
-      `第${ch.chapterIndex}章 ${ch.title || '未命名'}：${ch.summary || '无摘要'}`
-    ).join('\n\n')}\n`
     : '';
 
   // 构建用户提供的创作方向
@@ -54,7 +48,7 @@ export function getOutlineGenerationPrompt(
 
   return `你是一位专业的小说大纲设计师。请为小说的未来${chapterCount}个章节生成详细大纲。
 
-${globalSummarySection}${charactersSection}${worldRulesSection}${recentChaptersSection}${userDirectionSection}
+${allChaptersSection}${charactersSection}${worldRulesSection}${userDirectionSection}
 请为第${startingChapterIndex}章到第${startingChapterIndex + chapterCount - 1}章生成详细大纲。
 
 【大纲要求】
@@ -136,17 +130,12 @@ export function getChapterFromOutlinePrompt(context: {
     keyScenes?: Array<{ description: string; position: string }>;
   };
   globalSummary?: string;
-  metadata?: {
-    characters?: Record<string, Record<string, unknown>>;
-    worldRules?: Record<string, unknown>;
-  };
   previousChapterSummary?: string;
   additionalPrompt?: string;
 }): string {
   const {
     outline,
     globalSummary,
-    metadata,
     previousChapterSummary,
     additionalPrompt,
   } = context;
@@ -188,11 +177,6 @@ export function getChapterFromOutlinePrompt(context: {
     ? `【全局摘要】\n${globalSummary}\n`
     : '';
 
-  // 构建人物设定
-  const charactersSection = metadata?.characters
-    ? `【人物设定】\n${JSON.stringify(metadata.characters, null, 2)}\n`
-    : '';
-
   // 构建上一章摘要
   const previousChapterSection = previousChapterSummary
     ? `【上一章摘要】\n${previousChapterSummary}\n`
@@ -211,7 +195,7 @@ export function getChapterFromOutlinePrompt(context: {
 剧情摘要：
 ${outline.plotSummary}
 
-${characterGoalsSection}${conflictsSection}${emotionalArcSection}${keyScenesSection}${globalContextSection}${charactersSection}${previousChapterSection}${additionalPromptSection}
+${characterGoalsSection}${conflictsSection}${emotionalArcSection}${keyScenesSection}${globalContextSection}${previousChapterSection}${additionalPromptSection}
 【创作要求】
 1. 严格按照大纲进行创作，不得偏离大纲设定的剧情和场景
 2. 章节长度建议在2000-4000字

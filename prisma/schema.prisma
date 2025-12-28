@@ -88,7 +88,6 @@ model Novel {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   chapters    Chapter[]
   summaries   Summary[]
-  metadata    NovelMetadata?
   continuations Continuation[]
   embeddings  Embedding[]
   outlines    ChapterOutline[]
@@ -144,24 +143,6 @@ enum SummaryType {
   CHAPTER // 章节摘要
   VOLUME  // 卷/部分摘要
   GLOBAL  // 全局摘要
-}
-
-// 小说元数据（关键信息：人物、地点、世界观等）
-model NovelMetadata {
-  id          String   @id @default(uuid())
-  novelId     String   @unique
-  characters  Json?    // 人物信息（JSON格式）
-  locations   Json?    // 地点信息
-  timeline    Json?    // 时间线
-  worldRules  Json?    // 世界观规则
-  keyEvents   Json?    // 关键事件索引
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // 关联关系
-  novel       Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
-  
-  @@map("novel_metadata")
 }
 
 // 向量嵌入模型（使用pgvector存储）

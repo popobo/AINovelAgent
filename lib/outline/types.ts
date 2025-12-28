@@ -77,16 +77,15 @@ export interface OutlineGenerationResult {
  * 大纲上下文信息
  */
 export interface OutlineContext {
-  globalSummary?: string;
-  metadata?: {
-    characters?: Record<string, Record<string, unknown>>;
-    worldRules?: Record<string, unknown>;
-  };
-  recentChapters?: Array<{
+  allChapters?: Array<{
     chapterIndex: number;
     title?: string | null;
     summary?: string | null;
   }>;
+  metadata?: {
+    characters?: Record<string, Record<string, unknown>>;
+    worldRules?: Record<string, unknown>;
+  };
   startingContext?: {
     overallDirection?: string;
     specificRequirements?: string[];

@@ -6,7 +6,6 @@ import { prisma } from '@/lib/prisma';
 import { createOpenRouterClient } from '@/lib/openrouter/client';
 import { getOutlineGenerationPrompt } from './prompts';
 import { InvalidOutlineResponseError, OutlineGenerationError } from './errors';
-import { normalizeNovelMetadata } from './metadata-utils';
 import type { ChatMessage } from '@/lib/openrouter/types';
 import type { Prisma } from '@prisma/client';
 import type {
@@ -47,29 +46,15 @@ export async function generateOutlines(
       );
     }
 
-    // 3. 加载上下文信息
-    const [globalSummary, metadata, recentChapters] = await Promise.all([
-      // 获取全局摘要
-      prisma.summary.findFirst({
-        where: { novelId, type: 'GLOBAL', targetId: null },
-      }),
-      // 获取元数据
-      prisma.novelMetadata.findUnique({
-        where: { novelId },
-      }),
-      // 获取最近5章用于上下文
-      prisma.chapter.findMany({
-        where: { novelId },
-        orderBy: { chapterIndex: 'desc' },
-        take: 5,
-      }),
-    ]);
+    // 3. 加载上下文信息 - 只使用所有章节摘要
+    const allChapters = await prisma.chapter.findMany({
+      where: { novelId },
+      orderBy: { chapterIndex: 'asc' },
+    });
 
-    // 4. 构建上下文对象
+    // 4. 构建上下文对象 - 使用所有章节的摘要（不使用metadata）
     const context = {
-      globalSummary: globalSummary?.content || '',
-      metadata: normalizeNovelMetadata(metadata),
-      recentChapters: recentChapters.reverse().map((ch) => ({
+      allChapters: allChapters.map((ch) => ({
         chapterIndex: ch.chapterIndex,
         title: ch.title,
         summary: ch.summary,
@@ -92,6 +77,8 @@ export async function generateOutlines(
         content: prompt,
       },
     ];
+
+    console.log('messages', messages);
 
     const response = await client.chatCompletion({
       model: model || 'openai/gpt-4o-mini',

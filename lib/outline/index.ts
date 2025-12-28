@@ -8,4 +8,3 @@ export * from './validators';
 export * from './generators';
 export * from './chapter-generator';
 export * from './prompts';
-export * from './metadata-utils';

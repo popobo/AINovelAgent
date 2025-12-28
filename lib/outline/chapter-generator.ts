@@ -10,7 +10,6 @@ import {
   OutlineStatusError,
   ChapterGenerationError,
 } from './errors';
-import { normalizeNovelMetadata } from './metadata-utils';
 import type { ChatMessage } from '@/lib/openrouter/types';
 import type { ChapterGenerationFromOutlineOptions } from './types';
 
@@ -37,15 +36,11 @@ export async function generateChapterFromOutline(
       throw new OutlineStatusError(outline.status, 'APPROVED');
     }
 
-    // 3. 加载必要的上下文
-    const [globalSummary, metadata, previousChapter] = await Promise.all([
+    // 3. 加载必要的上下文（不使用metadata）
+    const [globalSummary, previousChapter] = await Promise.all([
       // 全局摘要
       prisma.summary.findFirst({
         where: { novelId: outline.novelId, type: 'GLOBAL', targetId: null },
-      }),
-      // 元数据
-      prisma.novelMetadata.findUnique({
-        where: { novelId: outline.novelId },
       }),
       // 上一章摘要
       prisma.chapter.findFirst({
@@ -67,7 +62,6 @@ export async function generateChapterFromOutline(
         keyScenes: (outline.keyScenes as Array<{ description: string; position: string }>) || undefined,
       },
       globalSummary: globalSummary?.content || '',
-      metadata: normalizeNovelMetadata(metadata),
       previousChapterSummary: previousChapter?.summary || '',
       additionalPrompt,
     });

@@ -146,11 +146,6 @@ export async function generateGlobalSummary(
     },
   });
 
-  // 获取小说元数据
-  const metadata = await prisma.novelMetadata.findUnique({
-    where: { novelId },
-  });
-
   // 获取最近N章的摘要
   const allChapters = await prisma.chapter.findMany({
     where: { novelId },
@@ -179,7 +174,6 @@ export async function generateGlobalSummary(
     // 方法A：直接生成（所有章节摘要都在上下文内）
     globalSummary = await generateGlobalSummaryDirect(
       chapterSummaries,
-      metadata,
       recentChapters,
       apiKey,
       model
@@ -188,7 +182,6 @@ export async function generateGlobalSummary(
     // 方法B：关键章节提取法
     globalSummary = await generateGlobalSummaryWithKeyChapters(
       chapterSummaries,
-      metadata,
       recentChapters,
       apiKey,
       model
@@ -203,7 +196,6 @@ export async function generateGlobalSummary(
  */
 async function generateGlobalSummaryDirect(
   chapterSummaries: Array<{ content: string; metadata: Prisma.JsonValue | null; targetId: string | null }>,
-  metadata: { characters: Prisma.JsonValue; worldRules: Prisma.JsonValue } | null,
   recentChapters: Array<{ chapterIndex: number; title: string | null; summary: string }>,
   apiKey: string,
   model: string
@@ -227,8 +219,6 @@ ${allSummariesText}
 
 【最近章节摘要】
 ${recentSummariesText}
-
-${metadata ? `【已有元数据】\n${JSON.stringify(metadata, null, 2)}` : ''}
 
 请按照要求的JSON格式返回全局摘要，重点分析：
 1. 核心剧情主线的起承转合和发展轨迹
@@ -368,27 +358,11 @@ ${metadata ? `【已有元数据】\n${JSON.stringify(metadata, null, 2)}` : ''}
     };
   } catch (error) {
     console.error('全局摘要生成错误:', error);
-    // 返回基础结构
-    const metadataChars = metadata?.characters as Record<string, { role: string; relationships: string[]; arc: string; personality?: string }> | undefined;
-    const metadataWorldRules = metadata?.worldRules as { setting: string; rules: string[]; locations: string[] } | undefined;
-
-    // 确保 characters 包含 personality 字段
-    const normalizedChars: Record<string, { role: string; personality: string; relationships: string[]; arc: string }> = {};
-    if (metadataChars) {
-      Object.entries(metadataChars).forEach(([name, char]) => {
-        normalizedChars[name] = {
-          role: char.role,
-          personality: char.personality || '未知',
-          relationships: char.relationships,
-          arc: char.arc
-        };
-      });
-    }
-
+    // 返回基础结构（不使用metadata）
     return {
       corePlot: '',
-      characters: normalizedChars,
-      worldBuilding: metadataWorldRules || { setting: '', rules: [], locations: [] },
+      characters: {},
+      worldBuilding: { setting: '', rules: [], locations: [] },
       recentChapters,
       keyThemes: [],
     };
@@ -400,7 +374,6 @@ ${metadata ? `【已有元数据】\n${JSON.stringify(metadata, null, 2)}` : ''}
  */
 async function generateGlobalSummaryWithKeyChapters(
   chapterSummaries: Array<{ content: string; metadata: Prisma.JsonValue | null; targetId: string | null }>,
-  metadata: { characters: Prisma.JsonValue; worldRules: Prisma.JsonValue } | null,
   recentChapters: Array<{ chapterIndex: number; title: string | null; summary: string }>,
   apiKey: string,
   model: string
@@ -430,8 +403,6 @@ async function generateGlobalSummaryWithKeyChapters(
 
 【关键章节详细分析】
 ${keySummariesText}
-
-${metadata ? `【已有元数据】\n${JSON.stringify(metadata, null, 2)}` : ''}
 
 请按照要求的JSON格式返回全局摘要，重点分析：
 1. 核心剧情主线的起承转合和发展轨迹
@@ -572,27 +543,11 @@ ${metadata ? `【已有元数据】\n${JSON.stringify(metadata, null, 2)}` : ''}
     };
   } catch (error) {
     console.error('全局摘要生成错误:', error);
-    // 返回基础结构
-    const metadataChars = metadata?.characters as Record<string, { role: string; relationships: string[]; arc: string; personality?: string }> | undefined;
-    const metadataWorldRules = metadata?.worldRules as { setting: string; rules: string[]; locations: string[] } | undefined;
-
-    // 确保 characters 包含 personality 字段
-    const normalizedChars: Record<string, { role: string; personality: string; relationships: string[]; arc: string }> = {};
-    if (metadataChars) {
-      Object.entries(metadataChars).forEach(([name, char]) => {
-        normalizedChars[name] = {
-          role: char.role,
-          personality: char.personality || '未知',
-          relationships: char.relationships,
-          arc: char.arc
-        };
-      });
-    }
-
+    // 返回基础结构（不使用metadata）
     return {
       corePlot: '',
-      characters: normalizedChars,
-      worldBuilding: metadataWorldRules || { setting: '', rules: [], locations: [] },
+      characters: {},
+      worldBuilding: { setting: '', rules: [], locations: [] },
       recentChapters,
       keyThemes: [],
     };
